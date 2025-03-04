@@ -1,0 +1,758 @@
+Email validation string :
+[RegularExpression(@"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", ErrorMessage = "Email is not valid")]
+
+Password validation string: 
+[RegularExpression(@"^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[@#$^+=!()%-])[A-Za-z\d@#$^+=!()%-]{8,}$", ErrorMessage = "please enter strong password")]
+
+Zipcode :
+[RegularExpression(@"^[0-9]{6}$", ErrorMessage = "Invalid Zipcode, should be exactly 6 digits.")]
+
+Phone: 
+[RegularExpression(@"^[0-9]{10}$", ErrorMessage = "Invalid phone number, should be exactly 10 digits.")]
+
+4.  Index (login) page validation
+@{
+    ViewData["Title"] = "Login";
+}
+@model PizzaShop.Repository.ModelView.LoginViewModel
+
+<div class="main">
+    <!-- Background Image -->
+    <div class="imageclass">
+        <img src="~/images/dominos_background.jpg" alt="Background Image">
+    </div>
+
+    <!-- Main Login -->
+    <div class="formclass">
+        <div class="mainformclass">
+            <h1 class="h1class">
+                <img src="~/images/logos/pizzashop_logo.png" alt="PizzaShop Logo" height="50px"> PIZZASHOP
+            </h1>
+
+            <div class="innerformclass">
+                <form class="inputlogin" method="post" id="loginForm">
+                    <div class="m-3">
+                        <h3>Welcome,</h3>
+
+                        <!-- Email Input -->
+                        <div class="has-validation my-2">
+                            <input type="text" asp-for="Email" class="form-control" id="emailInput" placeholder="Email">
+                            <span asp-validation-for="Email" class="text-danger"></span>
+                        </div>
+
+                        <!-- Password Input -->
+                        <div class="has-validation my-2">
+                            <div class="position-relative password-section">
+                                <input type="password" asp-for="Password" class="form-control" id="passwordInput" placeholder="Password">
+                                <div class="eye" onclick="togglePassword()">
+                                    <i class="bi bi-eye openeye eye inactive"></i>
+                                    <i class="bi bi-eye-slash closeeye eye active"></i>
+                                </div>
+                            </div>
+                            <span asp-validation-for="Password" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <!-- Remember Me & Forgot Password -->
+                    <div class="form-check d-flex m-3">
+                        <div class="input-group">
+                            <input asp-for="Rememberme" type="checkbox" class="form-check-input" id="rememberMe">
+                            <label class="form-check-label" for="rememberMe">Remember Me</label>
+                        </div>
+                        <a asp-action="ForgetPassword" asp-controller="Home" class="forgotPass d-flex flex-nowrap">Forgot Password?</a>
+                    </div>
+
+                    <!-- Login Button -->
+                    <div class="m-3">
+                        <button type="submit" class="loginButton">Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.5/jquery.validate.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validation-unobtrusive/3.2.12/jquery.validate.unobtrusive.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // Toastr Messages
+            var successMessage = "@TempData["SuccessMessage"]";
+            if (successMessage) {
+                toastr.success(successMessage, 'Success', { timeOut: 3000 });
+            }
+            var errorMessage = "@TempData["Error"]";
+            if (errorMessage) {
+                toastr.error(errorMessage, 'Error', { timeOut: 3000 });
+            }
+
+            // AJAX Email Update
+            $("#emailInput").on('input', function () {
+                var email = $(this).val();
+                $.ajax({
+                    url: '/Home/UpdateEmail',
+                    type: 'POST',
+                    data: { email: email },
+                    success: function (data) {
+                        console.log("Email updated successfully");
+                    }
+                });
+            });
+
+            // Form Validation
+            $("#loginForm").validate({
+                rules: {
+                    Email: {
+                        required: true,
+                        email: true
+                    },
+                    Password: {
+                        required: true,
+                        minlength: 8,
+                        pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[#$^+=!*()@%&]).{8,}$/
+                    }
+                },
+                messages: {
+                    Email: {
+                        required: "Email is required",
+                        email: "Enter a valid email"
+                    },
+                    Password: {
+                        required: "Password is required",
+                        minlength: "Password must be at least 8 characters",
+                        pattern: "Password must include an uppercase, lowercase, number, and special character"
+                    }
+                },
+                errorClass: "text-danger",
+                errorPlacement: function (error, element) {
+                    error.appendTo(element.parent());
+                },
+                submitHandler: function (form) {
+                    form.submit();
+                }
+            });
+
+        });
+
+        // Show/Hide Password
+        function togglePassword() {
+            var passwordField = document.getElementById("passwordInput");
+            if (passwordField.type === "password") {
+                passwordField.type = "text";
+            } else {
+                passwordField.type = "password";
+            }
+        }
+    </script>
+}
+
+
+
+5. forget password span tag
+@if (TempData["ErrorMessage"] != null)
+{
+    <span asp-validation-for="ToEmail" class="text-danger">@TempData["ErrorMessage"]</span>
+}
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <span asp-validation-for="ToEmail" class="text-success">@TempData["SuccessMessage"]</span>
+}
+
+
+6. middleware 
+using Microsoft.AspNetCore.Http;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using System.Threading.Tasks;
+
+public class TokenMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly IConfiguration _configuration;
+
+    public TokenMiddleware(RequestDelegate next, IConfiguration configuration)
+    {
+        _next = next;
+        _configuration = configuration;
+    }
+
+    public async Task Invoke(HttpContext context)
+    {
+        if (context.User.Identity != null && 
+            !context.User.Identity.IsAuthenticated && 
+            context.Request.Cookies.ContainsKey("auth_token"))
+        {
+            var token = context.Request.Cookies["auth_token"];
+
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]);
+                var parameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(key),
+                    ValidateIssuer = true,
+                    ValidIssuer = _configuration["Jwt:Issuer"],
+                    ValidateAudience = true,
+                    ValidAudience = _configuration["Jwt:Audience"],
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.Zero
+                };
+
+                var principal = tokenHandler.ValidateToken(token, parameters, out _);
+                context.User = principal;
+
+                var emailClaim = principal.FindFirst(ClaimTypes.Email)?.Value;
+                var roleClaim = principal.FindFirst(ClaimTypes.Role)?.Value;
+
+                if (!string.IsNullOrEmpty(emailClaim) && !string.IsNullOrEmpty(roleClaim))
+                {
+                    context.Items["UserEmail"] = emailClaim;
+                    context.Items["UserRole"] = roleClaim;
+                }
+                else
+                {
+                    Console.WriteLine("Email not found");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Token validation failed: {ex.Message}");
+                context.Response.Redirect("/Home/Index");
+                return;
+            }
+
+            if (context.User.Identity != null && !context.User.Identity.IsAuthenticated)
+            {
+                context.Response.Redirect("/Home/Index");
+                return;
+            }
+        }
+
+        await _next(context);
+    }
+}
+
+// Extension method for easy middleware registration
+public static class TokenMiddlewareExtensions
+{
+    public static IApplicationBuilder UseTokenMiddleware(this IApplicationBuilder builder)
+    {
+        return builder.UseMiddleware<TokenMiddleware>();
+    }
+}
+
+
+// register middleware 
+
+app.UseTokenMiddleware(); // Register the middleware
+
+
+7. validation for edit user per id
+@section scripts {
+    <script>
+        $(document).ready(function () {
+            $("form").validate({
+                rules: {
+                    Firstname: {
+                        required: true,
+                        minlength: 3
+                    },
+                    Lastname: {
+                        required: true,
+                        minlength: 3
+                    },
+                    Username: {
+                        required: true,
+                        minlength: 5
+                    },
+                    Email: {
+                        required: true,
+                        email: true,
+                        pattern: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+                    },
+                    phone: {
+                        required: true,
+                        digits: true,
+                        minlength: 10,
+                        maxlength: 15,
+                        pattern: /^[6-9]\d{9,14}$/   // Starts with 6-9 and is 10-15 digits long
+                    },
+                    Zipcode: {
+                        required: true,
+                        digits: true,
+                        minlength: 5,
+                        maxlength: 10,
+                        pattern: /^[0-9]{5,10}$/   // Only numbers, 5 to 10 digits
+                    },
+                    Address: {
+                        required: true,
+                        minlength: 5
+                    },
+                    Password: {
+                        required: true,
+                        minlength: 8,
+                        pattern: /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/  
+                        // Min 8 chars, 1 uppercase, 1 digit, 1 special character
+                    },
+                    roleId: {
+                        required: true
+                    },
+                    Status: {
+                        required: true
+                    },
+                    countryId: {
+                        required: true
+                    },
+                    stateId: {
+                        required: true
+                    },
+                    cityId: {
+                        required: true
+                    },
+                    imageFile: {
+                        extension: "jpg|jpeg|png"
+                    }
+                },
+                messages: {
+                    Firstname: {
+                        required: "First name is required",
+                        minlength: "Must be at least 3 characters"
+                    },
+                    Lastname: {
+                        required: "Last name is required",
+                        minlength: "Must be at least 3 characters"
+                    },
+                    Username: {
+                        required: "Username is required",
+                        minlength: "Must be at least 5 characters"
+                    },
+                    Email: {
+                        required: "Email is required",
+                        email: "Enter a valid email",
+                        pattern: "Invalid email format"
+                    },
+                    phone: {
+                        required: "Phone number is required",
+                        digits: "Only numbers allowed",
+                        minlength: "Must be at least 10 digits",
+                        maxlength: "Cannot exceed 15 digits",
+                        pattern: "Invalid phone number format"
+                    },
+                    Zipcode: {
+                        required: "Zipcode is required",
+                        digits: "Only numbers allowed",
+                        minlength: "Must be at least 5 digits",
+                        maxlength: "Cannot exceed 10 digits",
+                        pattern: "Invalid zipcode format"
+                    },
+                    Address: {
+                        required: "Address is required",
+                        minlength: "Must be at least 5 characters"
+                    },
+                    Password: {
+                        required: "Password is required",
+                        minlength: "Must be at least 8 characters",
+                        pattern: "Must contain 1 uppercase, 1 digit, and 1 special character"
+                    },
+                    roleId: {
+                        required: "Please select a role"
+                    },
+                    Status: {
+                        required: "Please select a status"
+                    },
+                    countryId: {
+                        required: "Please select a country"
+                    },
+                    stateId: {
+                        required: "Please select a state"
+                    },
+                    cityId: {
+                        required: "Please select a city"
+                    },
+                    imageFile: {
+                        extension: "Only JPG, JPEG, and PNG files are allowed"
+                    }
+                },
+                errorPlacement: function (error, element) {
+                    error.insertAfter(element);
+                    error.addClass("text-danger");
+                },
+                highlight: function (element) {
+                    $(element).addClass("is-invalid");
+                },
+                unhighlight: function (element) {
+                    $(element).removeClass("is-invalid");
+                }
+            });
+
+            // Live validation on input change
+            $("input, select").on("change keyup", function () {
+                $(this).valid();
+            });
+        });
+    </script>
+}
+
+
+
+8. validation for add user
+
+$(document).ready(function () {
+    // Country-State-City Dropdowns
+    $('#countrydropdown').change(function () {
+        var countryId = $(this).val();
+        $('#statedropdown').empty().append('<option value="">Select State</option>');
+        $('#citydropdown').empty().append('<option value="">Select City</option>');
+
+        if (countryId) {
+            $.getJSON('/DashBoardHelpers/GetStates', { countryId: countryId }, function (states) {
+                $.each(states.$values, function (i, state) {
+                    $('#statedropdown').append('<option value="' + state.stateid + '">' + state.statename + '</option>');
+                });
+            });
+        }
+    });
+
+    $('#statedropdown').change(function () {
+        var stateId = $(this).val();
+        $('#citydropdown').empty().append('<option value="">Select City</option>');
+
+        if (stateId) {
+            $.getJSON('/DashBoardHelpers/GetCities', { stateId: stateId }, function (cities) {
+                $.each(cities.$values, function (i, city) {
+                    $('#citydropdown').append('<option value="' + city.cityid + '">' + city.cityname + '</option>');
+                });
+            });
+        }
+    });
+
+    // Toggle Password Visibility
+    $("#togglePassword").click(function () {
+        let passwordField = $("#passwordField");
+        let icon = $(this).find("i");
+
+        if (passwordField.attr("type") === "password") {
+            passwordField.attr("type", "text");
+            icon.removeClass("bi-eye-slash").addClass("bi-eye");
+        } else {
+            passwordField.attr("type", "password");
+            icon.removeClass("bi-eye").addClass("bi-eye-slash");
+        }
+    });
+
+    // Client-Side Validation
+    $("form").submit(function (event) {
+        let email = $("#Email").val();
+        let password = $("#passwordField").val();
+        let zipcode = $("#Zipcode").val();
+        let phone = $("#phone").val();
+        let image = $("input[type='file']").val();
+
+        let emailRegex = /^\S+@\S+\.\S+$/;
+        let passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+        let zipRegex = /^\d{5}(-\d{4})?$/;
+        let phoneRegex = /^\d{10}$/;
+
+        if (!emailRegex.test(email)) {
+            alert("Invalid email format.");
+            event.preventDefault();
+        }
+        if (!passwordRegex.test(password)) {
+            alert("Password must be at least 8 characters long and include one letter and one number.");
+            event.preventDefault();
+        }
+        if (!zipRegex.test(zipcode)) {
+            alert("Invalid Zip Code.");
+            event.preventDefault();
+        }
+        if (!phoneRegex.test(phone)) {
+            alert("Phone number must be 10 digits.");
+            event.preventDefault();
+        }
+        if (!image) {
+            alert("Please upload an image.");
+            event.preventDefault();
+        }
+    });
+
+    // Display Selected Image
+    $("input[type='file']").change(function (event) {
+        let file = event.target.files[0];
+        if (file) {
+            let reader = new FileReader();
+            reader.onload = function (e) {
+                $(".file-upload").css("background-image", "url(" + e.target.result + ")");
+                $(".file-upload .icon").hide();
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    var errorMessage = "@TempData["error"]";
+    if (errorMessage) {
+        toastr.error(errorMessage, { timeOut: 5000 });
+    }
+});
+
+
+
+9. use profile 
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(function () {
+
+        // Image preview and auto-submit form when a file is selected
+        $('#fileInput').change(function () {
+            var file = this.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function (e) {
+                    $('img[alt="User Image"]').attr('src', e.target.result);
+                };
+                reader.readAsDataURL(file);
+
+                // Auto-submit image form
+                $(this).closest('form').submit();
+            }
+        });
+
+        // Country dropdown change event
+        $('#countrydropdown').change(function () {
+            var countryId = $(this).val();
+            $('#statedropdown').empty().append('<option value="">Select State</option>');
+            $('#citydropdown').empty().append('<option value="">Select City</option>');
+
+            if (countryId) {
+                $.getJSON('/DashBoardHelpers/GetStates', { countryId: countryId }, function (states) {
+                    $.each(states.$values, function (i, state) {
+                        $('#statedropdown').append('<option value="' + state.stateid + '">' + state.statename + '</option>');
+                    });
+                });
+            }
+        });
+
+        // State dropdown change event
+        $('#statedropdown').change(function () {
+            var stateId = $(this).val();
+            $('#citydropdown').empty().append('<option value="">Select City</option>');
+
+            if (stateId) {
+                $.getJSON('/DashBoardHelpers/GetCities', { stateId: stateId }, function (cities) {
+                    $.each(cities.$values, function (i, city) {
+                        $('#citydropdown').append('<option value="' + city.cityid + '">' + city.cityname + '</option>');
+                    });
+                });
+            }
+        });
+
+        // Validation function
+        function validateField(selector, errorSelector, regex, errorMessage) {
+            var value = $(selector).val().trim();
+            if (!regex.test(value)) {
+                $(errorSelector).text(errorMessage);
+                return false;
+            } else {
+                $(errorSelector).text('');
+                return true;
+            }
+        }
+
+        // Real-time validation on input change
+        $('#floatingInput[asp-for="Firstname"]').on('input', function () {
+            validateField(this, 'span[asp-validation-for="Firstname"]', /^[A-Za-z]{2,}$/, 'First name must be at least 2 letters.');
+        });
+
+        $('#floatingInput[asp-for="Lastname"]').on('input', function () {
+            validateField(this, 'span[asp-validation-for="Lastname"]', /^[A-Za-z]{2,}$/, 'Last name must be at least 2 letters.');
+        });
+
+        $('#floatingInput[asp-for="Username"]').on('input', function () {
+            validateField(this, 'span[asp-validation-for="Username"]', /^[A-Za-z0-9_]{3,}$/, 'Username must be at least 3 characters.');
+        });
+
+        $('#floatingInput[asp-for="phone"]').on('input', function () {
+            validateField(this, 'span[asp-validation-for="phone"]', /^\d{10}$/, 'Phone number must be exactly 10 digits.');
+        });
+
+        $('#floatingInput[asp-for="Address"]').on('input', function () {
+            validateField(this, 'span[asp-validation-for="Address"]', /^.{5,}$/, 'Address must be at least 5 characters long.');
+        });
+
+        $('#floatingInput[asp-for="Zipcode"]').on('input', function () {
+            validateField(this, 'span[asp-validation-for="Zipcode"]', /^\d{4,}$/, 'Zipcode must be numeric and at least 4 digits.');
+        });
+
+        $('#countrydropdown').change(function () {
+            var isValid = validateField(this, 'span[asp-validation-for="countryId"]', /\d+/, 'Please select a country.');
+        });
+
+        $('#statedropdown').change(function () {
+            var isValid = validateField(this, 'span[asp-validation-for="stateId"]', /\d+/, 'Please select a state.');
+        });
+
+        $('#citydropdown').change(function () {
+            var isValid = validateField(this, 'span[asp-validation-for="cityId"]', /\d+/, 'Please select a city.');
+        });
+
+        // Prevent form submission if any field is invalid
+        $('form[action="UpdateProfile"]').submit(function (e) {
+            var isValid = true;
+
+            // Validate all fields before submission
+            isValid &= validateField('#floatingInput[asp-for="Firstname"]', 'span[asp-validation-for="Firstname"]', /^[A-Za-z]{2,}$/, 'First name must be at least 2 letters.');
+            isValid &= validateField('#floatingInput[asp-for="Lastname"]', 'span[asp-validation-for="Lastname"]', /^[A-Za-z]{2,}$/, 'Last name must be at least 2 letters.');
+            isValid &= validateField('#floatingInput[asp-for="Username"]', 'span[asp-validation-for="Username"]', /^[A-Za-z0-9_]{3,}$/, 'Username must be at least 3 characters.');
+            isValid &= validateField('#floatingInput[asp-for="phone"]', 'span[asp-validation-for="phone"]', /^\d{10}$/, 'Phone number must be exactly 10 digits.');
+            isValid &= validateField('#floatingInput[asp-for="Address"]', 'span[asp-validation-for="Address"]', /^.{5,}$/, 'Address must be at least 5 characters long.');
+            isValid &= validateField('#floatingInput[asp-for="Zipcode"]', 'span[asp-validation-for="Zipcode"]', /^\d{4,}$/, 'Zipcode must be numeric and at least 4 digits.');
+            isValid &= validateField('#countrydropdown', 'span[asp-validation-for="countryId"]', /\d+/, 'Please select a country.');
+            isValid &= validateField('#statedropdown', 'span[asp-validation-for="stateId"]', /\d+/, 'Please select a state.');
+            isValid &= validateField('#citydropdown', 'span[asp-validation-for="cityId"]', /\d+/, 'Please select a city.');
+
+            if (!isValid) {
+                e.preventDefault(); // Prevent form submission if validation fails
+            }
+        });
+
+    });
+</script>
+
+
+10. change password 
+@section scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function () {
+
+            function validatePasswordField(selector, errorSelector, regex, errorMessage) {
+                var value = $(selector).val().trim();
+                if (!regex.test(value)) {
+                    $(errorSelector).text(errorMessage);
+                    return false;
+                } else {
+                    $(errorSelector).text('');
+                    return true;
+                }
+            }
+
+            // Validate on input change
+            $('#exampleInputPassword1').on('input', function () {
+                validatePasswordField(this, 'span[asp-validation-for="CurrentPassword"]', /^.{6,}$/, 'Password must be at least 6 characters.');
+            });
+
+            $('#exampleInputPassword2').on('input', function () {
+                validatePasswordField(this, 'span[asp-validation-for="Password"]', /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/, 'New password must be at least 8 characters, include 1 uppercase letter, 1 number, and 1 special character.');
+            });
+
+            $('#exampleInputPassword3').on('input', function () {
+                var password = $('#exampleInputPassword2').val();
+                var confirmPassword = $(this).val();
+                if (password !== confirmPassword) {
+                    $('span[asp-validation-for="ConfirmPassword"]').text('Passwords do not match.');
+                } else {
+                    $('span[asp-validation-for="ConfirmPassword"]').text('');
+                }
+            });
+
+            // Prevent form submission if any validation fails
+            $('form[action="ChangePassword"]').submit(function (e) {
+                var isValid = true;
+
+                isValid &= validatePasswordField('#exampleInputPassword1', 'span[asp-validation-for="CurrentPassword"]', /^.{6,}$/, 'Password must be at least 6 characters.');
+                isValid &= validatePasswordField('#exampleInputPassword2', 'span[asp-validation-for="Password"]', /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/, 'New password must be at least 8 characters, include 1 uppercase letter, 1 number, and 1 special character.');
+
+                var password = $('#exampleInputPassword2').val();
+                var confirmPassword = $('#exampleInputPassword3').val();
+                if (password !== confirmPassword) {
+                    $('span[asp-validation-for="ConfirmPassword"]').text('Passwords do not match.');
+                    isValid = false;
+                } else {
+                    $('span[asp-validation-for="ConfirmPassword"]').text('');
+                }
+
+                if (!isValid) {
+                    e.preventDefault(); // Stop form submission
+                }
+            });
+
+            // Show toast messages for TempData errors/success
+            var errorMessage = "@TempData["PasswordError"]";
+            if (errorMessage) {
+                toastr.error(errorMessage, 'Error', { timeOut: 5000 });
+            }
+
+            var errorMessage = "@TempData["PasswordError1"]";
+            if (errorMessage) {
+                toastr.error(errorMessage, 'Error', { timeOut: 5000 });
+            }
+
+            var successMessage = "@TempData["SUCCESS"]";
+            if (successMessage) {
+                toastr.success(successMessage, 'Success', { timeOut: 5000 });
+            }
+
+        });
+
+    </script>
+}
+
+
+
+
+11. change password : 
+[HttpPost]
+[ValidateAntiForgeryToken]
+public IActionResult ChangePassword(ResetPasswordViewModel obj)
+{
+    var email = HttpContext.Items["UserEmail"] as string;
+    ViewBag.Email = email;
+
+    if (!ModelState.IsValid)
+    {
+        return View(obj); // Return view if input validation fails
+    }
+
+    var account = _db.Accounts.FirstOrDefault(u => u.Email == email);
+    if (account == null)
+    {
+        ModelState.AddModelError("", "Account not found.");
+        return View(obj);
+    }
+
+    // Verify current password
+    if (!BCrypt.Net.BCrypt.EnhancedVerify(obj.CurrentPassword, account.Password))
+    {
+        ModelState.AddModelError("CurrentPassword", "Incorrect current password.");
+        return View(obj);
+    }
+
+    // Prevent using the same password
+    if (obj.Password == obj.CurrentPassword)
+    {
+        ModelState.AddModelError("Password", "New password cannot be the same as the old one.");
+        return View(obj);
+    }
+
+    // Check if new password and confirm password match
+    if (obj.Password != obj.ConfirmPassword)
+    {
+        ModelState.AddModelError("ConfirmPassword", "Passwords do not match.");
+        return View(obj);
+    }
+
+    // Update password and save changes
+    account.Password = BCrypt.Net.BCrypt.EnhancedHashPassword(obj.Password);
+    _db.SaveChanges();
+
+    TempData["SUCCESS"] = "Password updated successfully";
+    return RedirectToAction("ChangePassword");
+}
